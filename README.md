@@ -1,92 +1,218 @@
 # Lab 5: Follow the Gap
 
-## I. Learning Goals
+In this lab, you'll work on your "Follow the Gap" algorithm, which you'll use
+for Race 1. Each team will demonstrate and submit one implementation of the
+algorithm.
 
-- Reactive methods for obstacle avoidance
+## Learning Goals
 
-## II. Overview
+* Implement the "Follow the Gap" algorithm to navigate an entire racetrack,
+  avoiding any obstacles on the track.
+* Fine-tune parameters to ensure safety and optimize performance.
 
-In this lab, you will implement a reactive algorithm for obstacle avoidance. While the base starter code defines an implementation of the F1TENTH Follow the Gap Algorithm, you are allowed to submit in C++, and encouraged to try different reactive algorithms or a combination of several. In total, the python code for the algorithm is only about 120 lines.
+## Lab Setup
 
-## III. Review of F1TENTH Follow the Gap
+We will build off the local file structure given in the first lab. Keep this
+structure in mind while you are working through the instructions!
 
-The lecture slides on F1TENTH Follow the gap is the best visual resource for understanding every step of the algorithm. However, the steps are outlined over here:
+```
+${HOME}
+  |
+  +-- lab1_ws/              -- Lab 1 Workspace folder
+  |
+  +-- lab2_ws/              -- Lab 2 Workspace folder
+  |
+  +-- lab3_ws/              -- Lab 3 Workspace folder
+  |
+  +-- lab4_ws/              -- Lab 4 Workspace folder
+  |
+  +-- lab5_ws/              -- Lab 5 Workspace folder (NEW)
+  |
+  +-- sim_ws/               -- Simulator Workspace folder
+```
 
-1. Obtain laser scans and preprocess them.
-2. Find the closest point in the LiDAR ranges array.
-3. Draw a safety bubble around this closest point and set all points inside this bubble to 0. All other non-zero points are now considered “gaps” or “free space”.
-4. Find the max length “gap”, in other words, the largest number of consecutive non-zero elements in your ranges array.
-5. Find the best goal point in this gap. Naively, this could be the furthest point away in your gap, but you can probably go faster if you follow the “Better Idea” method as described in lecture.
-6. Actuate the car to move towards this goal point by publishing an `AckermannDriveStamped` to the /drive topic.
-
-### IV. Implementation
-
-Implement a gap follow algorithm to make the car drive autonomously around the Levine Hall map. You can implement this node in either C++ or Python. In the simulator, the vehicle will be tested
-in two maps provided in the gap_follow node: `levine_blocked.png`, which is empty, and `levine_obs.png`, which has obstacles that are relatively hard to navigate through for you to evaluate your code on.
+To start with the lab, clone the repository:
 
 ```bash
-1 gordon@f1sim:~/ws/gym-one/f1tenth_gym_ros/maps$ ls
-2 levine_blocked.png levine_obs.png levine.png Spielberg_map.png
-3 levine_blocked.yaml levine_obs.yaml levine.yaml Spielberg_map.yaml
+cd ~
+git clone https://github.com/unlv-f1/lab5 lab5_ws
 ```
 
-To change the map in the simulation, add the included `.png` and `.yaml` map files to `f1tenth_gym_ros/maps` directory. Then, change `f1tenth_gym_ros/config/sim.yaml` to use your desired map.
+Then, mount *~/lab5_ws* onto your Docker container, just as you've done for the
+previous labs. The repository contains the base code for you to get started.
+
+## Part 1: Follow the Gap Overview
+
+The lecture slides provide the best visual resources for understanding the
+Follow the Gap algorithm. In summary, the steps are:
+
+1. Preprocess (Modify) LiDAR scans
+    * Extend disparities
+    * Deploy safety bubble
+
+2. Identify all gaps and select a gap to follow
+    * Options for selection:
+        * Widest gap
+        * Deepest gap (gap with deepest point)
+        * (Your own custom method?)
+
+3. Find best point in gap
+    * Options for selecting best point:
+        * Furthest point
+        * "Better Idea" discussed in lecture
+        * (Your own custom method?)
+
+4. Drive the car to drive toward best point
+    * Calculate steering angle
+    * Calculate drive speed
+    * Publish
+
+Additionally, you may need to adjust your algorithm for the following issues:
+
+* **Wiggling**: When going down a long hallway, your algorithm may "wiggle"
+  because it is switching between two far-apart points.
+* **Going around corners**: When going around corners, be careful to publish a
+  steering angle which may hit the corner.
+
+## Part 2: Implementation
+
+### 2-1: Specification
+
+Create a package named `gap_follow`, which implements the Follow the Gap
+algorithm.
+
+#### Running Your Package
+
+You are free to run your package by using either `ros2 launch` or `ros2 run`.
+You may include parameters that you think are necessary for running your node
+successfully.
+
+Here is an example `ros2 run` invocation:
 
 ```bash
-1 gordon@f1sim:~/ws/gym-one/f1tenth_gym_ros/config$ emacs -nw sim.yaml # edit the sim.yaml file 
-2 >>> SNIP <<<
-3 # map parameters
-4 map_path: '/sim_ws/src/f1tenth_gym_ros/maps/levine_obs'
-5 map_img_ext: '.png'
-6 >>> SNIP <<<
-```
-**After any changes to the sim.yaml file, the docker will need to be restarted, re-entered and rebuilt.**
-
-### V. Deliverables and Demonstrations
-
-**Deliverable 1**: After you're finished, update the entire skeleton package directory with your `gap_follow` package and directly commit and push to a repo shared with your TA. Your commited code should start and run in simulation smoothly.
-
-**Shared Demonstration Requirements**:
-The parameters to the follow the gap algorithm must be accepted as command line arguments. There may be default values provided by the launch file, but they must be able to be overridden on the command line. The purpose of this requirement is to allow students the opportunity to adjust their implementations for the track conditions. This Lab affords students flexibility in their method of gap following, which may require a distinct set of parameters per implementation. Include a help option to your launch file that will display the command line options and their meaning and then stops the system.
-
-```# Breanna please include an example invocation, you do not need to implement this just a text sample such as:
-# ros2 launch follow_gap.py --help
-  bubble:=#   the size of the safety bubble in meters
-  maxvel:=#   the maximum velocity of the vehicle in meters/sec
+ros2 run gap_follow gap_follow_node --ros-args \
+    -p drive_speed_min:=1.0 \
+    -p drive_speed_max:=5.0 \
+    -p safety_bubble_diameter:=0.3 \
+    -p disparity_threshold:=0.3 \
+    -p disparity_extension_length:=0.3 \
+    -p gap_depth_threshold:=1.0 \
+    -p gap_width_threshold:=5
 ```
 
-**Simulator Demonstration**:
-A satisfactory demonstration includes the following:
-- The vehicle autonomously drives a lap around the track without collision.
-- The vehicle can successfully maneuver around obstacles on the track.
-- A launch command that includes all parameters of the given obstacle avoidance algorithm
+Here is an example `ros2 run` invocation using a parameter file. (All parameter
+values are stored in this file instead.)
 
-In presentation of the simulator, start your gap_follow node in an adjacent terminal to the simulator
-preview. Have the node output a message to terminal indicating that the node has successfully been started.
+```bash
+ros2 run gap_follow gap_follow_node --ros-args --params-file path/to/params-file.yaml
+```
 
-*Note: Continual terminal output delays node processing and may impact the correct operation of the vehicle.
-Provide terminal output for the successful launching of the node and no more.*
+#### Simulator Demonstration
 
-**Vehicle Demonstration**: The presentation on vehicle will be held on a track set up in the classroom. The vehicle will be expected
-to complete the following tasks:
-- The vehicle autonomously drives a lap around the track without collision.
-- The vehicle can successfully make its way around obstacles on the track.
-- A launch command that includes all parameters of the given obstacle avoidance algorithm
+Demonstrate your implementation by completing one lap around the track
+**without collision** on two maps in RViz:
 
-Depending on implementations, changes may need to be made to account for differences present on
-vehicle that do not exist in simulation. An example might be a difference in the radius of the physical
-vehicle, which is about 6 inches in length.
+1. `levine_blocked` (levine map with exits blocked)
+2. `levine_obs` (blocked levine map with obstacles)
 
+#### Vehicle Demonstration
 
+Demonstrate your implementation by completing two laps around the track
+**without collision**.
 
-### VI. Grading Rubric
+1. The first lap is on the track **without** any obstacles
+2. The second lap is on the track **with** obstacles.
 
-- Compilation: **10** Points
-- Implemented Find-Max Gap: **40** Points
-- Implemented Find best point: **30** Points
-- Clears Levine blocked: **10** Points
-- Clears Levine obstacles: **10** Points
+#### Code Submission
 
-### VII. Extra Resources
+Your team will submit a link to your repository on Canvas.
 
-UNC Follow the Gap Video: https://youtu.be/ctTJHueaTcY
+### 2-2: Changing Maps
+
+To test your implementation on the new maps, you'll need to change the map that
+`f1tenth_gym_ros` uses.
+
+First, download the map files from this repository:
+
+* `maps/levine_blocked.png`
+* `maps/levine_blocked.yaml`
+* `maps/levine_obs.png`
+* `maps/levine_obs.yaml`
+
+Put these inside your `/sim_ws/src/f1tenth_gym_ros/maps` directory inside your
+container. The directory should look like this:
+
+```
+/sim_ws/src/f1tenth_gym_ros/maps
+  |
+  +-- levine.png
+  |
+  +-- levine.yaml
+  |
+  +-- levine_blocked.png     -- NEW FILE
+  |
+  +-- levine_blocked.yaml    -- NEW FILE
+  |
+  +-- levine_obs.png         -- NEW FILE
+  |
+  +-- levine_obs.yaml        -- NEW FILE
+  |
+  +-- Spielberg_map.png
+  |
+  +-- Spielberg_map.yaml
+```
+
+Then, edit your `/sim_ws/src/f1tenth_gym_ros/config/sim.yaml`, find the line
+for `map_path`. You'll see that the current value is set to this:
+
+```yaml
+    map_path: '/sim_ws/src/f1tenth_gym_ros/maps/levine'
+```
+
+To change the map to `levine_blocked`, change it:
+
+```yaml
+    map_yaml: '/sim_ws/src/f1tenth_gym_ros/maps/levine_blocked'
+```
+
+Then, rebuild the `f1tenth_gym_ros` package using:
+
+```bash
+cd /sim_ws
+colcon build --packages-select f1tenth_gym_ros
+source install/local_setup.bash
+```
+
+Then, launch the gym:
+
+```bash
+ros2 launch f1tenth_gym_ros gym_bridge_launch.py
+```
+
+You should see that the map has changed to `levine_blocked`.
+
+### 2-3: Tips for Testing
+
+This lab is larger than the previous labs in terms of the amount of code. As a
+result, students in the past have struggled to pinpoint the exact part of their
+code which caused issues.
+
+Thus, it's recommended that you visualize the effects of your code in RViz.
+Consider publishing messages containing your modified laser scan ranges to a
+topic and displaying that in RViz. You can also make use of **ROS 2 markers** to
+display custom shapes, lines, and text in RViz.
+
+## Grading Rubric
+
+* Simulator Demonstration: **50** points
+* Vehicle Demonstration: **50** points
+
+## Extra Resources
+
+* UNC Follow the Gap Video: https://youtu.be/ctTJHueaTcY
+* Tutorial on parameter files from the Robotics Back-End:
+  https://roboticsbackend.com/ros2-yaml-params/
+* ROS 2 Markers Tutorial:
+  https://docs.ros.org/en/jazzy/Tutorials/Intermediate/RViz/Marker-Display-types/Marker-Display-types.html
+    * Note: This is for a newer ROS 2 distro, but the tutorial tips should help
+      regardless.
