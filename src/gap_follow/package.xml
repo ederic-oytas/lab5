@@ -4,7 +4,7 @@
   <name>gap_follow</name>
   <version>0.0.0</version>
   <description>TODO: Package description</description>
-  <maintainer email="edericoytas@gmail.com">root</maintainer>
+  <maintainer email="YOUREMAILHERE">root</maintainer>
   <license>TODO: License declaration</license>
 
   <test_depend>ament_copyright</test_depend>
